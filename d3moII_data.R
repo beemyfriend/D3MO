@@ -1,4 +1,4 @@
-setwd('//media/beemyfriend/UUI/R_Projects')
+setwd('//media/beemyfriend/UUI/R_Projects/D3MO/')
 packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest')
 sapply(packages, library, character.only = T)
 
@@ -6,8 +6,8 @@ main_url <- 'http://www.nws.noaa.gov/hic/flood_stats/Fatalities/'
 main_append <- '.htm'
 
 #manually extracted first two years from site's html
-info_location <- c('us_flood_data/2010_flood_fatalities.html', 
-                   'us_flood_data/2011_flood_fatalities.html', 
+info_location <- c('data/us_flood_data/2010_flood_fatalities.html', 
+                   'data/us_flood_data/2011_flood_fatalities.html', 
                    str_c(main_url, 2012, main_append),
                    str_c(main_url, 2013, main_append),
                    str_c(main_url, 2014, main_append))
@@ -23,10 +23,19 @@ death_info_12 <- htmltab(info_location[3])
 death_info_13 <- htmltab(info_location[4])
 death_info_14 <- htmltab(info_location[5])
 
-death_info_list <- list(death_info_10, death_info_11, death_info_12, death_info_13, death_info_14)
-names(death_info_list[[4]])[9] <- 'Circumstance'
+death_info_list <- list(death_info_10, 
+                        death_info_11, 
+                        death_info_12, 
+                        death_info_13, 
+                        death_info_14)
+
+#Check for differences in years
 sapply(death_info_list, names)
 
+#change 'Comments' variable to 'Circumstance' variable in death_info_13. To stay consistent with other data.frame variables
+names(death_info_list[[4]])[9] <- 'Circumstance'
+
+#Determine what should be kept in final dataset
 important_columns <- c('Date', 'State', 'City', 'County', 'Age', 'Sex', 'Vehicle_Related', 'Circumstance')
 sapply(important_columns, function(x){
   sapply(death_info_list, function(y){
@@ -34,14 +43,17 @@ sapply(important_columns, function(x){
   })
 })
 
+#the first two data frames simply new named variables
 names(death_info_list[[1]])[8] <- 'Vehicle_Related'
 names(death_info_list[[2]])[8] <- 'Vehicle_Related'
 
+#There is only one data frame that doesn't explicitly explain what the victim was doing.
 sapply(death_info_list, function(x){
-  str_detect(names(x), 'Vehicle|Activity')
+  T %in% str_detect(names(x), 'Vehicle|Activity')
 })
-trial %>% str()
 
+#The first two data frames provide a binary for whether the victim was in a vehicle or not
+#the last two data frames provide the activity the the victim was doing before death
 sapply(death_info_list, function(x){
   if(T %in% str_detect(names(x), 'Vehicle')){
     column_name <- x %>% names() %>% .[str_detect(x %>% names(), 'Vehicle')]
@@ -52,17 +64,30 @@ sapply(death_info_list, function(x){
   }
 })
 
-vehicle_column <- 'Vehicle_Related'
 
+
+#Let's create the 'Vehicle_Related' variable for the middle data frame
+#we will do this by searching for terms associated with vehicle.
 death_info_list[[3]] <- death_info_list[[3]] %>%
-  mutate(Vehicle_Related = Circumstance %>% str_detect(regex('drive|car|vehicle', ignore_case = T)))
+  mutate(Vehicle_Related = Circumstance %>% 
+           str_detect(regex('drive|car|vehicle', ignore_case = T)))
 
+#We'll also create a 'Vehicle_Related' variable for the final two.
 death_info_list[[4]] <- death_info_list[[4]] %>%
   mutate(Vehicle_Related = Activity %>% str_detect(regex('Driving|Horseback|ATV')))
 
 death_info_list[[5]] <- death_info_list[[5]] %>%
   mutate(Vehicle_Related = Activity %>% str_detect(regex('Driving|Horseback|ATV')))
 
+#And let's make the 'Vehicle_Related' column in the first two data frames consistent with the rest
+#and provide a true/flase binary
+death_info_list[[1]]$Vehicle_Related <- death_info_list[[1]]$Vehicle_Related %>%
+  str_detect('Yes')
+
+death_info_list[[2]]$Vehicle_Related <- death_info_list[[2]]$Vehicle_Related %>%
+  str_detect('Yes')
+
+#Let's also create an explicit Year variable, just in case
 death_info_list %>% sapply(function(x){
   x$Date %>% head
 })
@@ -71,6 +96,7 @@ for(i in 1:5){
   death_info_list[[i]]$Year = (2009 + i)
 }
 
+#Now, let's put them together
 every_flood_death <- data.frame()
 for(i in seq_along(death_info_list)){
   temp <- death_info_list[[i]] %>%
@@ -78,27 +104,8 @@ for(i in seq_along(death_info_list)){
   every_flood_death <- rbind(every_flood_death, temp)
 }
 
+#let's get rid of missing values. It seems like Date == '' is a good indicator of missing values
 every_flood_death <- every_flood_death %>% 
-  filter(Date != '') %>%
-  mutate(Vehicle_Related = str_detect(Vehicle_Related, regex('TRUE|Yes')))
+  filter(Date != '') 
 
-readr::write_tsv(every_flood_death, 'every_flood_death_20102014.tsv')
-
-
-fhtml %>%
-  str_extract('<tbody>')
-
-html %>%
-  html_node('frame') %>%
-  html_node('#document')
-
-trial %>% str
-driver_deaths <- trial %>%
-  filter(Activity == 'Driving')
-
-driver_deaths_info <- driver_deaths[[death_info[index]]] %>%
-  str_replace_all('\\s\\s+', ' ')
-
-driver_deaths %>%
-  str
-
+readr::write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
