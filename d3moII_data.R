@@ -1,5 +1,6 @@
 setwd('//media/beemyfriend/UUI/R_Projects/D3MO/')
-packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest', 'readr', 'tidytext', 'ggplot2', 'ggmap')
+packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest', 
+              'readr', 'tidytext', 'ggplot2', 'ggmap', 'lubridate')
 sapply(packages, library, character.only = T)
 
 main_url <- 'http://www.nws.noaa.gov/hic/flood_stats/Fatalities/'
@@ -11,7 +12,6 @@ info_location <- c('data/us_flood_data/2010_flood_fatalities.html',
                    str_c(main_url, 2012, main_append),
                    str_c(main_url, 2013, main_append),
                    str_c(main_url, 2014, main_append))
-
 
 death_info_10 <- read_html(info_location[1]) %>% html_nodes('table') %>% html_table(header = T) %>% .[[1]]
 death_info_10 <- death_info_10[death_info_10 %>% names() %>% sapply(function(x){x != ''}) ]
@@ -63,8 +63,6 @@ sapply(death_info_list, function(x){
     x[column_name] %>% unique
   }
 })
-
-
 
 #Let's create the 'Vehicle_Related' variable for the middle data frame
 #we will do this by searching for terms associated with vehicle.
@@ -142,6 +140,8 @@ circumstance_bigrams <- circumstance_df %>%
   unite(bigram, word1, word2, sep = ' ') %>%
   mutate(bigram = bigram %>% factor(levels = rev(bigram)))
   
+write_tsv(circumstance_bigrams, 'data/us_flood_data/circumstance_bigrams.tsv')
+
 circumstance_trigrams <- circumstance_df %>%
   unnest_tokens(trigram, circumstance, token = 'ngrams', n = 3) %>%
   separate(trigram, c('word1', 'word2', 'word3'), sep = ' ') %>%
@@ -151,6 +151,8 @@ circumstance_trigrams <- circumstance_df %>%
   unite(trigram, word1, word2, word3, sep = ' ') %>%
   count(trigram, sort = T) %>%
   mutate(trigram = trigram %>% factor(levels = rev(trigram)))
+
+write_tsv(circumstance_trigrams, 'data/us_flood_data/circumstance_trigrams.tsv')
 
 circumstance_bigrams %>% filter(n > 2) %>% .$bigram 
 circumstance_trigrams %>% filter(n > 1) %>% .$trigram
@@ -242,7 +244,7 @@ ggmap(usmap) +
 dev.off()
 
 write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
-
+every_flood_death <- read_tsv('data/us_flood_data/every_flood_death_20102014.tsv')
 #analyze the days
 deadly_days <- every_flood_death %>%
   count(Date, sort = T) %>%
@@ -254,5 +256,57 @@ deadly_days <- lapply(deadly_days$Date, function(x){
 
 sapply(deadly_days, length)
 
-deadliest_day <- every_flood_death %>%
+most_distinct_incidents <- every_flood_death %>%
   filter(Date == '8/28/2011')
+
+every_flood_death %>% 
+  filter(Date %>% str_detect('\\d+/\\d+/\\d\\d$'))
+
+
+date <- every_flood_death$Date %>%
+  sapply(function(x){
+    
+    ifelse(str_detect(x, '\\d+/\\d+/\\d\\d$'), 
+           str_c(str_sub(x, 1, str_length(x) - 2), '20', str_sub(x, str_length(x) -1) ),
+           x)
+  })
+
+date <- date %>% mdy()
+
+every_flood_death <- every_flood_death %>%
+  mutate(Date = date)
+
+data(state)
+
+state_info <- data.frame(State = state.abb, Region = state.region, Division = state.division)
+
+every_flood_death <- every_flood_death %>% left_join(state_info)
+
+write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
+
+unique_incidents %>% filter(is.na(Region))
+
+unique_incidents <- every_flood_death %>%
+  group_by(Date, State, Circumstance, Region, Division) %>%
+  nest() %>%
+  count(Date, State, Region, Division, Circumstance, sort =T) 
+
+ggplot(unique_incidents, aes(Date, n)) +
+  scale_x_date(date_breaks = '6 months',
+               date_labels = '%b %Y') +
+  geom_col()
+
+ggplot(unique_incidents %>% filter(!is.na(Region)), aes(Date, n)) +
+  scale_x_date(date_breaks = '1 years',
+               date_labels = '%Y', 
+               date_minor_breaks = '1 day') +
+  geom_col() +
+  facet_wrap(~Region)
+
+ggplot(unique_incidents %>% filter(!is.na(Division)), aes(Date, n)) +
+  geom_col() +
+  facet_wrap(~Division)
+
+summary(every_flood_death)
+unique_incidents %>% count(Division, Date, sort = T)
+unique_incidents %>% count(Region, Date, sort = T)
