@@ -1,5 +1,5 @@
 setwd('//media/beemyfriend/UUI/R_Projects/D3MO/')
-packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest', 'readr', 'tidytext', 'ggplot2')
+packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest', 'readr', 'tidytext', 'ggplot2', 'ggmap')
 sapply(packages, library, character.only = T)
 
 main_url <- 'http://www.nws.noaa.gov/hic/flood_stats/Fatalities/'
@@ -140,7 +140,7 @@ circumstance_bigrams <- circumstance_df %>%
   filter(!word2 %in% stop_words$word) %>%
   count(word1, word2, sort = T) %>%
   unite(bigram, word1, word2, sep = ' ') %>%
-  mutate(bigram = bigram %>% factor(levels = bigram))
+  mutate(bigram = bigram %>% factor(levels = rev(bigram)))
   
 circumstance_trigrams <- circumstance_df %>%
   unnest_tokens(trigram, circumstance, token = 'ngrams', n = 3) %>%
@@ -150,24 +150,67 @@ circumstance_trigrams <- circumstance_df %>%
          !word3 %in% stop_words$word) %>%
   unite(trigram, word1, word2, word3, sep = ' ') %>%
   count(trigram, sort = T) %>%
-  mutate(trigram = trigram %>% factor(levels = trigram))
+  mutate(trigram = trigram %>% factor(levels = rev(trigram)))
 
 circumstance_bigrams %>% filter(n > 2) %>% .$bigram 
 circumstance_trigrams %>% filter(n > 1) %>% .$trigram
 
+png(filename = 'images/us_flood_images/circumstance_bigrams.png', width = 1000, height = 600, res = 100)
 ggplot(circumstance_bigrams %>% filter(n > 2), aes(bigram, n)) +
   geom_col() +
-  coord_flip()
+  coord_flip() +
+  ggtitle('National Weather Services: Top Bigrams for Flood Death Circumstances')
+dev.off()
 
+png(filename = 'images/us_flood_images/circumstance_trigrams.png', width = 1000, height = 600, res = 100)
 ggplot(circumstance_trigrams %>% filter(n > 1), aes(trigram, n)) +
   geom_col() +
-  coord_flip()
+  coord_flip() +
+  ggtitle('National Weather Services: Top Trigrams for Flood Death Circumstances')
+dev.off()
 
 #now let's analyze the locations
 
+county <- every_flood_death$County %>% str_replace_all('\\s+', ' ')
+every_flood_death$County <- county
 every_flood_death %>%
-  count(State, sort = T)
+  count(County, sort = T)
 
+city <- every_flood_death$City %>% str_replace_all('\\s+', ' ')
+every_flood_death$City <- city
+every_flood_death %>%
+  count(City, sort = T)
+
+every_flood_death %>%
+  count(State, City, County, sort = T)
+
+every_flood_death %>%
+  count(State, City, sort = T)
+
+every_flood_death <- every_flood_death %>%
+  mutate(location_for_google = str_c(City, ', ', State))
+
+location_for_google <- every_flood_death %>% 
+  filter(!is.na(location_for_google)) %>% .$location_for_google %>% unique
+
+location_coordinates <- lapply(location_for_google, geocode)
+
+geolocation_information <- data.frame(
+  location_for_google = location_for_google,
+  lon = sapply(seq_along(location_coordinates), function(i){location_coordinates[[i]]$lon}),
+  lat = sapply(seq_along(location_coordinates), function(i){location_coordinates[[i]]$lat})
+)
+
+write_tsv(geolocation_information, 'data/us_flood_data/geolocation_information.tsv')
+
+every_flood_death <- every_flood_death %>%
+  left_join(geolocation_information)
+
+usmap <- get_map(location = 'United States', maptype  = 'watercolor', scale = 7)
+
+write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
+
+#analyze the days
 deadly_days <- every_flood_death %>%
   count(Date, sort = T) %>%
   filter(n > 10)
@@ -178,3 +221,5 @@ deadly_days <- lapply(deadly_days$Date, function(x){
 
 sapply(deadly_days, length)
 
+deadliest_day <- every_flood_death %>%
+  filter(Date == '8/28/2011')
