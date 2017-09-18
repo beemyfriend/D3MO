@@ -1,5 +1,5 @@
 setwd('//media/beemyfriend/UUI/R_Projects/D3MO/')
-packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest')
+packages <- c('dplyr', 'stringr', 'htmltab', 'tidyr', 'rvest', 'readr', 'tidytext', 'ggplot2')
 sapply(packages, library, character.only = T)
 
 main_url <- 'http://www.nws.noaa.gov/hic/flood_stats/Fatalities/'
@@ -109,3 +109,72 @@ every_flood_death <- every_flood_death %>%
   filter(Date != '') 
 
 readr::write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
+
+
+#let's analyze this data
+#starting with text analysis
+
+every_flood_death <- readr::read_tsv('data/us_flood_data/every_flood_death_20102014.tsv')
+
+circumstance <- every_flood_death$Circumstance %>%
+  str_replace_all('\\s\\s+', ' ')
+
+find_circ <- function(vect, i){ifelse(vect[i] == '"', find_circ(vect, i-1), vect[i])}
+circumstance <- sapply(seq_along(circumstance), function(i){find_circ(circumstance, i)})
+every_flood_death$Circumstance <- circumstance
+
+write_tsv <- write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
+
+unique_circumstance <- circumstance %>% unique %>% .[!is.na(.)]
+circumstance_df <- data.frame(id = seq_along(unique_circumstance), circumstance = unique_circumstance, stringsAsFactors = F)
+
+circumstance_counts <- circumstance_df %>% 
+  unnest_tokens(word, circumstance) %>%
+  anti_join(stop_words) %>%
+  count(word, sort = T)
+
+circumstance_bigrams <- circumstance_df %>%
+  unnest_tokens(bigram, circumstance, token = 'ngrams', n = 2) %>%
+  separate(bigram, c('word1', 'word2'), sep = ' ') %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  count(word1, word2, sort = T) %>%
+  unite(bigram, word1, word2, sep = ' ') %>%
+  mutate(bigram = bigram %>% factor(levels = bigram))
+  
+circumstance_trigrams <- circumstance_df %>%
+  unnest_tokens(trigram, circumstance, token = 'ngrams', n = 3) %>%
+  separate(trigram, c('word1', 'word2', 'word3'), sep = ' ') %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  unite(trigram, word1, word2, word3, sep = ' ') %>%
+  count(trigram, sort = T) %>%
+  mutate(trigram = trigram %>% factor(levels = trigram))
+
+circumstance_bigrams %>% filter(n > 2) %>% .$bigram 
+circumstance_trigrams %>% filter(n > 1) %>% .$trigram
+
+ggplot(circumstance_bigrams %>% filter(n > 2), aes(bigram, n)) +
+  geom_col() +
+  coord_flip()
+
+ggplot(circumstance_trigrams %>% filter(n > 1), aes(trigram, n)) +
+  geom_col() +
+  coord_flip()
+
+#now let's analyze the locations
+
+every_flood_death %>%
+  count(State, sort = T)
+
+deadly_days <- every_flood_death %>%
+  count(Date, sort = T) %>%
+  filter(n > 10)
+
+deadly_days <- lapply(deadly_days$Date, function(x){
+  every_flood_death %>% filter(Date == x) %>% .$Circumstance %>% unique}
+  )
+
+sapply(deadly_days, length)
+
