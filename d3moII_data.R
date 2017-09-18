@@ -206,7 +206,40 @@ write_tsv(geolocation_information, 'data/us_flood_data/geolocation_information.t
 every_flood_death <- every_flood_death %>%
   left_join(geolocation_information)
 
-usmap <- get_map(location = 'United States', maptype  = 'watercolor', scale = 7)
+deaths_by_location_total <- every_flood_death %>%
+  filter(!is.na(location_for_google)) %>%
+  count(location_for_google, lon, lat, sort = T)
+
+deaths_by_location_year <- every_flood_death %>%
+  filter(!is.na(location_for_google)) %>%
+  count(location_for_google, lon, lat, Year, sort = T)
+
+usmap <- get_map(location = 'united states', 
+                 maptype  = 'watercolor', 
+                 zoom = 4)
+
+png(filename = 'images/us_flood_images/geolocated_deaths_total.png', width = 1000, height = 600, res = 100)
+ggmap(usmap) +
+  geom_point(
+    data = deaths_by_location_total, 
+    aes(lon, lat, size = n),
+    alpha = .5
+  ) +
+  ggtitle('National Weather Services: Map of Flood Deaths in Mainland USA') +
+  labs(size = 'Total Number of Deaths') 
+dev.off()
+
+png(filename = 'images/us_flood_images/geolocated_deaths_year.png', width = 1000, height = 600, res = 100)
+ggmap(usmap) +
+  geom_point(
+    data = deaths_by_location_year, 
+    aes(lon, lat, size = n),
+    alpha = .5
+  ) +
+  ggtitle('National Weather Services: Map of Flood Deaths in Mainland USA by Year') +
+  labs(size = 'Total Number of Deaths') +
+  facet_wrap(~Year)
+dev.off()
 
 write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
 
