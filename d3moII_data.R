@@ -284,29 +284,110 @@ every_flood_death <- every_flood_death %>% left_join(state_info)
 
 write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
 
+every_flood_death <- every_flood_death %>%
+  mutate(rounded_date = Date %>% floor_date('month')) %>%
+  mutate(Weekday = Date %>% weekdays()) %>%
+  mutate(Month = Date %>% months())
+
+write_tsv(every_flood_death, 'data/us_flood_data/every_flood_death_20102014.tsv')
+
 unique_incidents %>% filter(is.na(Region))
 
 unique_incidents <- every_flood_death %>%
-  group_by(Date, State, Circumstance, Region, Division) %>%
+  group_by(rounded_date, State, Circumstance, Region, Division) %>%
   nest() %>%
-  count(Date, State, Region, Division, Circumstance, sort =T) 
+  count(rounded_date, State, Region, Division, Circumstance, sort =T) 
 
-ggplot(unique_incidents, aes(Date, n)) +
+
+
+unique_incidents_weekday <- every_flood_death %>%
+  group_by(Weekday, State, Circumstance, Region, Division ) %>%
+  nest() %>%
+  count(Weekday, State, Circumstance, Region, Division) %>%
+  filter(!is.na(Weekday)) %>%
+  mutate(Weekday = Weekday %>% 
+           factor(levels = c('Sunday', 'Monday', 'Tuesday', 'Wednesday',
+                             'Thursday', 'Friday', 'Saturday')))
+
+unique_incidents_month <- every_flood_death %>%
+  group_by(Month, Circumstance, Region, Division) %>%
+  nest() %>%
+  count(Month, Circumstance, Region, Division) %>%
+  filter(!is.na(Month)) %>%
+  mutate(Month = Month %>% factor(levels = month.name))
+
+png(filename = 'images/us_flood_images/all_deaths_by_date.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents, aes(rounded_date, n)) +
   scale_x_date(date_breaks = '6 months',
                date_labels = '%b %Y') +
-  geom_col()
+  geom_col() +
+  ggtitle('National Weather Services: Histogram of All Flood Deaths in USA by Date') +
+  labs(size = 'Number of Deaths')
+dev.off()
 
-ggplot(unique_incidents %>% filter(!is.na(Region)), aes(Date, n)) +
+
+png(filename = 'images/us_flood_images/regional_deaths_by_date.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents %>% filter(!is.na(Region)), aes(rounded_date, n)) +
   scale_x_date(date_breaks = '1 years',
                date_labels = '%Y', 
                date_minor_breaks = '1 day') +
   geom_col() +
-  facet_wrap(~Region)
+  facet_wrap(~Region) +
+  ggtitle('National Weather Services: Histogram of Regional Flood Deaths in USA by Date') +
+  labs(size = 'Number of Deaths')
+dev.off()
 
-ggplot(unique_incidents %>% filter(!is.na(Division)), aes(Date, n)) +
+png(filename = 'images/us_flood_images/divisional_deaths_by_date.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents %>% filter(!is.na(Division)), aes(rounded_date, n)) +
   geom_col() +
-  facet_wrap(~Division)
+  facet_wrap(~Division) +
+  ggtitle('National Weather Services: Histogram of Divisional Flood Deaths in USA by Date') +
+  labs(size = 'Number of Deaths')
+dev.off()
 
-summary(every_flood_death)
-unique_incidents %>% count(Division, Date, sort = T)
-unique_incidents %>% count(Region, Date, sort = T)
+
+png(filename = 'images/us_flood_images/all_deaths_by_weekday.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_weekday , aes(Weekday, n)) +
+  geom_col() +
+  ggtitle('National Weather Services: Histogram of All Flood Deaths in USA by Weekday') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+png(filename = 'images/us_flood_images/regional_deaths_by_weekday.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_weekday %>% filter(!is.na(Region)), aes(Weekday, n)) +
+  geom_col() +
+  facet_wrap(~Region) +
+  ggtitle('National Weather Services: Histogram of Regional Flood Deaths in USA by Weekday') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+png(filename = 'images/us_flood_images/divisional_deaths_by_weekday.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_weekday %>% filter(!is.na(Division)), aes(Weekday,n)) +
+  geom_col() +
+  facet_wrap(~Division) +
+  ggtitle('National Weather Services: Histogram of Divisional Flood Deaths in USA by Weekday') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+png(filename = 'images/us_flood_images/all_deaths_by_month.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_month , aes(Month, n)) +
+  geom_col() +
+  ggtitle('National Weather Services: Histogram of All Flood Deaths in USA by Month') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+png(filename = 'images/us_flood_images/regional_deaths_by_month.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_month %>% filter(!is.na(Region)), aes(Month, n)) +
+  geom_col() +
+  facet_wrap(~Region) +
+  ggtitle('National Weather Services: Histogram of Regional Flood Deaths in USA by Month') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+png(filename = 'images/us_flood_images/divisional_deaths_by_month.png', width = 1200, height = 600, res = 100)
+ggplot(unique_incidents_month %>% filter(!is.na(Division)), aes(Month,n)) +
+  geom_col() +
+  facet_wrap(~Division) +
+  ggtitle('National Weather Services: Histogram of Divisional Flood Deaths in USA by Month') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
